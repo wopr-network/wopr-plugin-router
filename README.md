@@ -1,6 +1,11 @@
 # WOPR Router Plugin (Example)
 
-This example plugin shows how to build middleware that routes messages between channels and sessions.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![WOPR](https://img.shields.io/badge/WOPR-Plugin-blue)](https://github.com/TSavo/wopr)
+
+Example plugin for [WOPR](https://github.com/TSavo/wopr) showing how to build middleware that routes messages between channels and sessions.
+
+> Part of the [WOPR](https://github.com/TSavo/wopr) ecosystem - Self-sovereign AI session management over P2P.
 
 ## Config
 
