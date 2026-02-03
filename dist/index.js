@@ -16,7 +16,7 @@ let uiServer = null;
 function startUIServer(port = 7333) {
     const server = http.createServer((req, res) => {
         const url = req.url === "/" ? "/ui.js" : req.url || "/ui.js";
-        const filePath = join(ctx.getPluginDir(), url);
+        const filePath = join(ctx.getPluginDir(), "dist", url);
         const ext = extname(filePath).toLowerCase();
         res.setHeader("Content-Type", CONTENT_TYPES[ext] || "application/octet-stream");
         res.setHeader("Access-Control-Allow-Origin", "*");

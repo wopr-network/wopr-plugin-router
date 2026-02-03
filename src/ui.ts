@@ -1,14 +1,48 @@
 /**
  * Router Plugin UI Component for WOPR
- * 
- * Vanilla JS SolidJS component for managing message routing rules.
+ *
+ * SolidJS component for managing message routing rules.
  */
 
-const { createSignal, onMount } = window.Solid || Solid;
+declare const Solid: {
+  createSignal: <T>(initial: T) => [
+    { (): T; (fn: (value: T) => void): void },
+    (value: T) => void
+  ];
+  onMount: (fn: () => void | Promise<void>) => void;
+};
 
-export default function RouterPluginUI(props) {
-  const [routes, setRoutes] = createSignal([]);
-  const [outgoingRoutes, setOutgoingRoutes] = createSignal([]);
+interface Route {
+  sourceSession: string;
+  targetSessions: string[];
+  channelType?: string;
+}
+
+interface RouterConfig {
+  routes?: Route[];
+  outgoingRoutes?: Route[];
+}
+
+interface PluginConfig {
+  plugins?: {
+    data?: {
+      router?: RouterConfig;
+    };
+  };
+}
+
+interface RouterPluginProps {
+  api: {
+    getConfig(): Promise<PluginConfig>;
+  };
+  saveConfig(config: RouterConfig): Promise<void>;
+}
+
+const { createSignal, onMount } = (window as unknown as { Solid: typeof Solid }).Solid || Solid;
+
+export default function RouterPluginUI(props: RouterPluginProps): HTMLDivElement {
+  const [routes, setRoutes] = createSignal<Route[]>([]);
+  const [outgoingRoutes, setOutgoingRoutes] = createSignal<Route[]>([]);
   const [newSource, setNewSource] = createSignal("");
   const [newTargets, setNewTargets] = createSignal("");
   const [newChannelType, setNewChannelType] = createSignal("");
@@ -20,28 +54,31 @@ export default function RouterPluginUI(props) {
     setOutgoingRoutes(routerConfig.outgoingRoutes || []);
   });
 
-  const handleAddRoute = async () => {
+  const handleAddRoute = async (): Promise<void> => {
     if (!newSource() || !newTargets()) return;
-    
-    const newRoute = {
+
+    const newRoute: Route = {
       sourceSession: newSource(),
-      targetSessions: newTargets().split(",").map(s => s.trim()).filter(Boolean),
+      targetSessions: newTargets()
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
       channelType: newChannelType() || undefined,
     };
-    
+
     const updatedRoutes = [...routes(), newRoute];
     await props.saveConfig({
       routes: updatedRoutes,
       outgoingRoutes: outgoingRoutes(),
     });
-    
+
     setRoutes(updatedRoutes);
     setNewSource("");
     setNewTargets("");
     setNewChannelType("");
   };
 
-  const handleDeleteRoute = async (index) => {
+  const handleDeleteRoute = async (index: number): Promise<void> => {
     const updatedRoutes = routes().filter((_, i) => i !== index);
     await props.saveConfig({
       routes: updatedRoutes,
@@ -53,7 +90,7 @@ export default function RouterPluginUI(props) {
   // Create DOM
   const container = document.createElement("div");
   container.className = "router-plugin-ui";
-  
+
   // Header
   const header = document.createElement("div");
   header.className = "flex items-center justify-between mb-4";
@@ -64,14 +101,14 @@ export default function RouterPluginUI(props) {
     </span>
   `;
   container.appendChild(header);
-  
+
   // Routes list
   const routesSection = document.createElement("div");
   routesSection.className = "mb-4";
-  
-  const updateRoutesList = () => {
+
+  const updateRoutesList = (): void => {
     routesSection.innerHTML = "";
-    
+
     if (routes().length === 0) {
       routesSection.innerHTML = `
         <div class="text-sm text-wopr-muted p-3 bg-wopr-panel rounded border border-wopr-border">
@@ -81,7 +118,8 @@ export default function RouterPluginUI(props) {
     } else {
       routes().forEach((route, index) => {
         const item = document.createElement("div");
-        item.className = "p-3 bg-wopr-panel rounded border border-wopr-border flex items-center justify-between mb-2";
+        item.className =
+          "p-3 bg-wopr-panel rounded border border-wopr-border flex items-center justify-between mb-2";
         item.innerHTML = `
           <div>
             <div class="font-medium">${route.sourceSession} → ${route.targetSessions.join(", ")}</div>
@@ -91,18 +129,21 @@ export default function RouterPluginUI(props) {
             Delete
           </button>
         `;
-        item.querySelector(".delete-route").addEventListener("click", () => handleDeleteRoute(index));
+        const deleteBtn = item.querySelector(".delete-route");
+        if (deleteBtn) {
+          deleteBtn.addEventListener("click", () => handleDeleteRoute(index));
+        }
         routesSection.appendChild(item);
       });
     }
   };
-  
+
   // Initial render and reactive updates
-  const unsubscribe = routes(updateRoutesList);
+  routes(updateRoutesList);
   updateRoutesList();
-  
+
   container.appendChild(routesSection);
-  
+
   // Add route form
   const formSection = document.createElement("div");
   formSection.className = "p-3 bg-wopr-panel rounded border border-wopr-border";
@@ -117,27 +158,32 @@ export default function RouterPluginUI(props) {
       </button>
     </div>
   `;
-  
+
   // Bind inputs
-  const sourceInput = formSection.querySelector(".source-input");
-  const targetsInput = formSection.querySelector(".targets-input");
-  const channelInput = formSection.querySelector(".channel-input");
-  
-  sourceInput.addEventListener("input", (e) => setNewSource(e.target.value));
-  targetsInput.addEventListener("input", (e) => setNewTargets(e.target.value));
-  channelInput.addEventListener("input", (e) => setNewChannelType(e.target.value));
-  formSection.querySelector(".add-btn").addEventListener("click", handleAddRoute);
-  
+  const sourceInput = formSection.querySelector(".source-input") as HTMLInputElement;
+  const targetsInput = formSection.querySelector(".targets-input") as HTMLInputElement;
+  const channelInput = formSection.querySelector(".channel-input") as HTMLInputElement;
+
+  sourceInput.addEventListener("input", (e) => setNewSource((e.target as HTMLInputElement).value));
+  targetsInput.addEventListener("input", (e) => setNewTargets((e.target as HTMLInputElement).value));
+  channelInput.addEventListener("input", (e) => setNewChannelType((e.target as HTMLInputElement).value));
+
+  const addBtn = formSection.querySelector(".add-btn");
+  if (addBtn) {
+    addBtn.addEventListener("click", handleAddRoute);
+  }
+
   container.appendChild(formSection);
-  
+
   // Info section
   const infoSection = document.createElement("div");
-  infoSection.className = "mt-4 p-3 bg-wopr-panel/50 rounded border border-wopr-border text-sm text-wopr-muted";
+  infoSection.className =
+    "mt-4 p-3 bg-wopr-panel/50 rounded border border-wopr-border text-sm text-wopr-muted";
   infoSection.innerHTML = `
     <p class="mb-1"><strong>Incoming:</strong> Messages to source session are forwarded to targets.</p>
     <p><strong>Outgoing:</strong> Responses are sent back to originating channel.</p>
   `;
   container.appendChild(infoSection);
-  
+
   return container;
 }

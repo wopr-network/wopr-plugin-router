@@ -88,7 +88,7 @@ let uiServer: Server | null = null;
 function startUIServer(port: number = 7333): Server {
   const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = req.url === "/" ? "/ui.js" : req.url || "/ui.js";
-    const filePath = join(ctx!.getPluginDir(), url);
+    const filePath = join(ctx!.getPluginDir(), "dist", url);
     const ext = extname(filePath).toLowerCase();
 
     res.setHeader("Content-Type", CONTENT_TYPES[ext] || "application/octet-stream");
