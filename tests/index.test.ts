@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import http from "http";
 
 // The plugin uses module-level state, so we need to re-import for isolation
 // We'll dynamically import it in each test suite
@@ -65,7 +64,7 @@ describe("router plugin", () => {
   describe("metadata", () => {
     it("should have correct name and version", () => {
       expect(plugin.name).toBe("router");
-      expect(plugin.version).toBe("0.2.0");
+      expect(plugin.version).toBe("0.3.0");
       expect(plugin.description).toContain("routing");
     });
   });

@@ -140,7 +140,7 @@ async function fanOutToChannels(route: OutgoingRoute, output: OutgoingOutput): P
 
 export default {
   name: "router",
-  version: "0.2.0",
+  version: "0.3.0",
   description: "Message routing middleware between channels and sessions",
 
   async init(pluginContext: PluginContext): Promise<void> {
