@@ -12,7 +12,7 @@
     "dist"
   ],
   "main": "dist/index.js",
-  "name": "wopr-plugin-router",
+  "name": "@wopr-network/wopr-plugin-router",
   "scripts": {
     "build": "tsc && npm run build:ui",
     "build:ui": "esbuild src/ui.ts --bundle --format=esm --outfile=dist/ui.js --target=es2020",
@@ -31,5 +31,8 @@
   "wopr": {
     "minVersion": "1.0.0",
     "type": "plugin"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
