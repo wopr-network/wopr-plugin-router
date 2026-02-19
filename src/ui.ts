@@ -122,19 +122,29 @@ export default function RouterPluginUI(
 				const item = document.createElement("div");
 				item.className =
 					"p-3 bg-wopr-panel rounded border border-wopr-border flex items-center justify-between mb-2";
-				item.innerHTML = `
-          <div>
-            <div class="font-medium">${route.sourceSession} → ${route.targetSessions.join(", ")}</div>
-            ${route.channelType ? `<div class="text-sm text-wopr-muted">Channel: ${route.channelType}</div>` : ""}
-          </div>
-          <button class="delete-route px-3 py-1 bg-red-500/20 text-red-400 rounded text-sm hover:bg-red-500/30">
-            Delete
-          </button>
-        `;
-				const deleteBtn = item.querySelector(".delete-route");
-				if (deleteBtn) {
-					deleteBtn.addEventListener("click", () => handleDeleteRoute(index));
+
+				const detailDiv = document.createElement("div");
+
+				const titleDiv = document.createElement("div");
+				titleDiv.className = "font-medium";
+				titleDiv.textContent = `${route.sourceSession} → ${route.targetSessions.join(", ")}`;
+				detailDiv.appendChild(titleDiv);
+
+				if (route.channelType) {
+					const channelDiv = document.createElement("div");
+					channelDiv.className = "text-sm text-wopr-muted";
+					channelDiv.textContent = `Channel: ${route.channelType}`;
+					detailDiv.appendChild(channelDiv);
 				}
+
+				const deleteBtn = document.createElement("button");
+				deleteBtn.className =
+					"delete-route px-3 py-1 bg-red-500/20 text-red-400 rounded text-sm hover:bg-red-500/30";
+				deleteBtn.textContent = "Delete";
+				deleteBtn.addEventListener("click", () => handleDeleteRoute(index));
+
+				item.appendChild(detailDiv);
+				item.appendChild(deleteBtn);
 				routesSection.appendChild(item);
 			});
 		}
