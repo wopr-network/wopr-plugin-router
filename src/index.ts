@@ -118,10 +118,9 @@ function startUIServer(port: number = 7333): Server {
 							buildRouterStatusResponse(config, uiServer !== null),
 						),
 					);
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
+				} catch {
 					res.statusCode = 500;
-					res.end(JSON.stringify({ error: message }));
+					res.end(JSON.stringify({ error: "Internal server error" }));
 				}
 				return;
 			}
@@ -131,10 +130,9 @@ function startUIServer(port: number = 7333): Server {
 				try {
 					const config = ctx?.getConfig() || { routes: [], outgoingRoutes: [] };
 					res.end(JSON.stringify(buildListRoutesResponse(config)));
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
+				} catch {
 					res.statusCode = 500;
-					res.end(JSON.stringify({ error: message }));
+					res.end(JSON.stringify({ error: "Internal server error" }));
 				}
 				return;
 			}
@@ -143,17 +141,18 @@ function startUIServer(port: number = 7333): Server {
 				res.setHeader("Access-Control-Allow-Origin", "*");
 				try {
 					res.end(JSON.stringify(buildRoutingStatsResponse(getStats())));
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
+				} catch {
 					res.statusCode = 500;
-					res.end(JSON.stringify({ error: message }));
+					res.end(JSON.stringify({ error: "Internal server error" }));
 				}
 				return;
 			}
 
 			// Existing static file serving logic
-			const url = rawUrl === "/" ? "/ui.js" : rawUrl;
-			const filePath = join(ctx!.getPluginDir(), "dist", url);
+			const relUrl = rawUrl === "/" ? "/ui.js" : rawUrl;
+			// Prevent path traversal: strip leading slash and remove any ".." segments
+			const safeSegment = relUrl.replace(/^\/+/, "").replace(/\.\./g, "");
+			const filePath = join(ctx!.getPluginDir(), "dist", safeSegment);
 			const ext = extname(filePath).toLowerCase();
 
 			res.setHeader(
@@ -205,8 +204,7 @@ async function fanOutToSessions(
 			recordRouteHit(input.session, target);
 		} catch (err) {
 			ctx?.log.error(
-				"Error routing to session: " +
-					(err instanceof Error ? err.message : String(err)),
+				`Failed to route message from ${input.session} to ${target}: ${err}`,
 			);
 			incrementErrors();
 		}
@@ -227,8 +225,7 @@ async function fanOutToChannels(
 			incrementOutgoingRouted();
 		} catch (err) {
 			ctx?.log.error(
-				"Error routing to channel: " +
-					(err instanceof Error ? err.message : String(err)),
+				`Failed to send message to channel ${adapter.channel.type}:${adapter.channel.id}: ${err}`,
 			);
 			incrementErrors();
 		}
