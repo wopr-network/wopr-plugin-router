@@ -36,5 +36,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "release": {
+    "extends": "@wopr-network/semantic-release-config"
   }
 }
