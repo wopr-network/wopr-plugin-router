@@ -111,23 +111,43 @@ function startUIServer(port: number = 7333): Server {
 			if (rawUrl === "/api/webmcp/status") {
 				res.setHeader("Content-Type", "application/json");
 				res.setHeader("Access-Control-Allow-Origin", "*");
-				const config = ctx?.getConfig() || { routes: [], outgoingRoutes: [] };
-				res.end(
-					JSON.stringify(buildRouterStatusResponse(config, uiServer !== null)),
-				);
+				try {
+					const config = ctx?.getConfig() || { routes: [], outgoingRoutes: [] };
+					res.end(
+						JSON.stringify(
+							buildRouterStatusResponse(config, uiServer !== null),
+						),
+					);
+				} catch (err) {
+					const message = err instanceof Error ? err.message : String(err);
+					res.statusCode = 500;
+					res.end(JSON.stringify({ error: message }));
+				}
 				return;
 			}
 			if (rawUrl === "/api/webmcp/routes") {
 				res.setHeader("Content-Type", "application/json");
 				res.setHeader("Access-Control-Allow-Origin", "*");
-				const config = ctx?.getConfig() || { routes: [], outgoingRoutes: [] };
-				res.end(JSON.stringify(buildListRoutesResponse(config)));
+				try {
+					const config = ctx?.getConfig() || { routes: [], outgoingRoutes: [] };
+					res.end(JSON.stringify(buildListRoutesResponse(config)));
+				} catch (err) {
+					const message = err instanceof Error ? err.message : String(err);
+					res.statusCode = 500;
+					res.end(JSON.stringify({ error: message }));
+				}
 				return;
 			}
 			if (rawUrl === "/api/webmcp/stats") {
 				res.setHeader("Content-Type", "application/json");
 				res.setHeader("Access-Control-Allow-Origin", "*");
-				res.end(JSON.stringify(buildRoutingStatsResponse(getStats())));
+				try {
+					res.end(JSON.stringify(buildRoutingStatsResponse(getStats())));
+				} catch (err) {
+					const message = err instanceof Error ? err.message : String(err);
+					res.statusCode = 500;
+					res.end(JSON.stringify({ error: message }));
+				}
 				return;
 			}
 
@@ -183,7 +203,11 @@ async function fanOutToSessions(
 			await ctx!.inject(target, input.message);
 			incrementRouted();
 			recordRouteHit(input.session, target);
-		} catch {
+		} catch (err) {
+			ctx?.log.error(
+				"Error routing to session: " +
+					(err instanceof Error ? err.message : String(err)),
+			);
 			incrementErrors();
 		}
 	}
@@ -201,7 +225,11 @@ async function fanOutToChannels(
 		try {
 			await adapter.send(output.response);
 			incrementOutgoingRouted();
-		} catch {
+		} catch (err) {
+			ctx?.log.error(
+				"Error routing to channel: " +
+					(err instanceof Error ? err.message : String(err)),
+			);
 			incrementErrors();
 		}
 	}
