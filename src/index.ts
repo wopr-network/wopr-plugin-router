@@ -4,13 +4,17 @@
  * Middleware-driven routing between channels and sessions.
  */
 
-import { createReadStream } from "fs";
+import { createReadStream } from "node:fs";
 import http, {
 	type IncomingMessage,
 	type Server,
 	type ServerResponse,
-} from "http";
-import { extname, join } from "path";
+} from "node:http";
+import { extname, join } from "node:path";
+import type {
+	WOPRPluginContext,
+	WOPRPlugin as WOPRPluginInterface,
+} from "@wopr-network/plugin-types";
 import {
 	getStats,
 	incrementErrors,
@@ -25,6 +29,7 @@ import {
 	buildRoutingStatsResponse,
 } from "./webmcp-tools.js";
 
+// Plugin-specific types (not in @wopr-network/plugin-types)
 interface Route {
 	sourceSession?: string;
 	targetSessions?: string[];
@@ -44,19 +49,9 @@ interface RouterConfig {
 	outgoingRoutes?: OutgoingRoute[];
 }
 
-interface Channel {
-	type: string;
-	id: string;
-}
-
-interface ChannelAdapter {
-	channel: Channel;
-	send(message: string): Promise<void>;
-}
-
 interface IncomingInput {
 	session: string;
-	channel?: Channel;
+	channel?: { type: string; id: string };
 	message: string;
 }
 
@@ -65,32 +60,14 @@ interface OutgoingOutput {
 	response: string;
 }
 
-interface Logger {
-	info(message: string): void;
-	warn(message: string): void;
-	error(message: string): void;
-}
-
-interface UiComponentConfig {
-	id: string;
-	title: string;
-	moduleUrl: string;
-	slot: string;
-	description: string;
-}
-
-interface PluginContext {
-	log: Logger;
-	getConfig(): RouterConfig;
-	getPluginDir(): string;
-	inject(session: string, message: string): Promise<void>;
-	getChannelsForSession(session: string): ChannelAdapter[];
+// Extended context with middleware registration (router-specific capability)
+interface RouterPluginContext extends WOPRPluginContext {
 	registerMiddleware(middleware: {
 		name: string;
 		onIncoming?(input: IncomingInput): Promise<string>;
 		onOutgoing?(output: OutgoingOutput): Promise<string>;
 	}): void;
-	registerUiComponent?(config: UiComponentConfig): void;
+	unregisterMiddleware?(name: string): void;
 }
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -99,8 +76,9 @@ const CONTENT_TYPES: Record<string, string> = {
 	".html": "text/html",
 };
 
-let ctx: PluginContext | null = null;
+let ctx: RouterPluginContext | null = null;
 let uiServer: Server | null = null;
+const cleanups: Array<() => void> = [];
 
 function startUIServer(port: number = 7333): Server {
 	const server = http.createServer(
@@ -112,13 +90,16 @@ function startUIServer(port: number = 7333): Server {
 				res.setHeader("Content-Type", "application/json");
 				res.setHeader("Access-Control-Allow-Origin", "*");
 				try {
-					const config = ctx?.getConfig() || { routes: [], outgoingRoutes: [] };
+					const config = ctx?.getConfig<RouterConfig>() || {
+						routes: [],
+						outgoingRoutes: [],
+					};
 					res.end(
 						JSON.stringify(
 							buildRouterStatusResponse(config, uiServer !== null),
 						),
 					);
-				} catch {
+				} catch (_error: unknown) {
 					res.statusCode = 500;
 					res.end(JSON.stringify({ error: "Internal server error" }));
 				}
@@ -128,9 +109,12 @@ function startUIServer(port: number = 7333): Server {
 				res.setHeader("Content-Type", "application/json");
 				res.setHeader("Access-Control-Allow-Origin", "*");
 				try {
-					const config = ctx?.getConfig() || { routes: [], outgoingRoutes: [] };
+					const config = ctx?.getConfig<RouterConfig>() || {
+						routes: [],
+						outgoingRoutes: [],
+					};
 					res.end(JSON.stringify(buildListRoutesResponse(config)));
-				} catch {
+				} catch (_error: unknown) {
 					res.statusCode = 500;
 					res.end(JSON.stringify({ error: "Internal server error" }));
 				}
@@ -141,7 +125,7 @@ function startUIServer(port: number = 7333): Server {
 				res.setHeader("Access-Control-Allow-Origin", "*");
 				try {
 					res.end(JSON.stringify(buildRoutingStatsResponse(getStats())));
-				} catch {
+				} catch (_error: unknown) {
 					res.statusCode = 500;
 					res.end(JSON.stringify({ error: "Internal server error" }));
 				}
@@ -152,7 +136,8 @@ function startUIServer(port: number = 7333): Server {
 			const relUrl = rawUrl === "/" ? "/ui.js" : rawUrl;
 			// Prevent path traversal: strip leading slash and remove any ".." segments
 			const safeSegment = relUrl.replace(/^\/+/, "").replace(/\.\./g, "");
-			const filePath = join(ctx!.getPluginDir(), "dist", safeSegment);
+			const pluginDir = ctx?.getPluginDir() ?? "";
+			const filePath = join(pluginDir, "dist", safeSegment);
 			const ext = extname(filePath).toLowerCase();
 
 			res.setHeader(
@@ -168,7 +153,7 @@ function startUIServer(port: number = 7333): Server {
 					res.statusCode = 404;
 					res.end("Not found");
 				});
-			} catch {
+			} catch (_error: unknown) {
 				res.statusCode = 500;
 				res.end("Error");
 			}
@@ -182,7 +167,7 @@ function startUIServer(port: number = 7333): Server {
 	return server;
 }
 
-function matchesRoute(route: Route, input: IncomingInput): boolean {
+export function matchesRoute(route: Route, input: IncomingInput): boolean {
 	if (route.sourceSession && route.sourceSession !== input.session)
 		return false;
 	if (route.channelType && route.channelType !== input.channel?.type)
@@ -199,7 +184,7 @@ async function fanOutToSessions(
 	for (const target of targets) {
 		if (!target || target === input.session) continue;
 		try {
-			await ctx!.inject(target, input.message);
+			await ctx?.inject(target, input.message);
 			incrementRouted();
 			recordRouteHit(input.session, target);
 		} catch (err) {
@@ -215,7 +200,7 @@ async function fanOutToChannels(
 	route: OutgoingRoute,
 	output: OutgoingOutput,
 ): Promise<void> {
-	const channels = ctx!.getChannelsForSession(output.session);
+	const channels = ctx?.getChannelsForSession(output.session) ?? [];
 	for (const adapter of channels) {
 		if (route.channelType && adapter.channel.type !== route.channelType)
 			continue;
@@ -232,15 +217,50 @@ async function fanOutToChannels(
 	}
 }
 
-export default {
+export const WOPRPlugin: WOPRPluginInterface = {
 	name: "router",
 	version: "0.3.0",
 	description: "Message routing middleware between channels and sessions",
 
-	async init(pluginContext: PluginContext): Promise<void> {
-		ctx = pluginContext;
+	manifest: {
+		name: "router",
+		version: "0.3.0",
+		description: "Message routing middleware between channels and sessions",
+		capabilities: ["message-routing"],
+		category: "middleware",
+		tags: ["routing", "middleware", "multi-bot", "channels"],
+		icon: "route",
+		configSchema: {
+			title: "Router Plugin Configuration",
+			description: "Configure message routing between sessions and channels",
+			fields: [
+				{
+					name: "uiPort",
+					type: "number" as const,
+					label: "UI Port",
+					description: "Port for the routing UI server",
+					default: 7333,
+				},
+				{
+					name: "routes",
+					type: "array" as const,
+					label: "Incoming Routes",
+					description: "Incoming message routing rules",
+				},
+				{
+					name: "outgoingRoutes",
+					type: "array" as const,
+					label: "Outgoing Routes",
+					description: "Outgoing response routing rules",
+				},
+			],
+		},
+	},
 
-		const config = ctx.getConfig();
+	async init(pluginContext: WOPRPluginContext): Promise<void> {
+		ctx = pluginContext as RouterPluginContext;
+
+		const config = ctx.getConfig<RouterConfig>();
 		const uiPort = config.uiPort || 7333;
 		uiServer = startUIServer(uiPort);
 
@@ -252,6 +272,9 @@ export default {
 				slot: "settings",
 				description: "Configure message routing between sessions",
 			});
+			if (ctx.unregisterUiComponent) {
+				cleanups.push(() => ctx?.unregisterUiComponent?.("router-panel"));
+			}
 			ctx.log.info("Registered Router UI component in WOPR settings");
 		}
 
@@ -279,8 +302,8 @@ export default {
 		ctx.registerMiddleware({
 			name: "router",
 			async onIncoming(input: IncomingInput): Promise<string> {
-				const config = ctx!.getConfig();
-				const routes = config.routes || [];
+				const config = ctx?.getConfig<RouterConfig>();
+				const routes = config?.routes || [];
 				for (const route of routes) {
 					if (!matchesRoute(route, input)) continue;
 					await fanOutToSessions(route, input);
@@ -288,8 +311,8 @@ export default {
 				return input.message;
 			},
 			async onOutgoing(output: OutgoingOutput): Promise<string> {
-				const config = ctx!.getConfig();
-				const routes = config.outgoingRoutes || [];
+				const config = ctx?.getConfig<RouterConfig>();
+				const routes = config?.outgoingRoutes || [];
 				for (const route of routes) {
 					if (route.sourceSession && route.sourceSession !== output.session)
 						continue;
@@ -298,14 +321,30 @@ export default {
 				return output.response;
 			},
 		});
+		cleanups.push(() => ctx?.unregisterMiddleware?.("router"));
 	},
 
 	async shutdown(): Promise<void> {
+		for (const cleanup of cleanups) {
+			try {
+				cleanup();
+			} catch (_error: unknown) {
+				ctx?.log.error(
+					`Cleanup error: ${_error instanceof Error ? _error.message : String(_error)}`,
+				);
+			}
+		}
+		cleanups.length = 0;
+
 		if (uiServer) {
 			ctx?.log.info("Router UI server shutting down...");
-			await new Promise<void>((resolve) => uiServer!.close(() => resolve()));
+			await new Promise<void>((resolve) => uiServer?.close(() => resolve()));
 			uiServer = null;
 		}
+
 		resetStats();
+		ctx = null;
 	},
 };
+
+export default WOPRPlugin;
