@@ -133,10 +133,24 @@ function startUIServer(port: number = 7333): Server {
 			}
 
 			// Existing static file serving logic
+			if (!ctx) {
+				res.statusCode = 503;
+				res.end("Service unavailable");
+				return;
+			}
 			const relUrl = rawUrl === "/" ? "/ui.js" : rawUrl;
-			// Prevent path traversal: strip leading slash and remove any ".." segments
-			const safeSegment = relUrl.replace(/^\/+/, "").replace(/\.\./g, "");
-			const pluginDir = ctx?.getPluginDir() ?? "";
+			// Prevent path traversal: decode percent-encoding before sanitizing so
+			// encoded variants like %2e%2e bypass the literal ".." check are caught.
+			let decodedUrl: string;
+			try {
+				decodedUrl = decodeURIComponent(relUrl);
+			} catch {
+				res.statusCode = 400;
+				res.end("Bad request");
+				return;
+			}
+			const safeSegment = decodedUrl.replace(/^\/+/, "").replace(/\.\./g, "");
+			const pluginDir = ctx.getPluginDir();
 			const filePath = join(pluginDir, "dist", safeSegment);
 			const ext = extname(filePath).toLowerCase();
 
