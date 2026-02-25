@@ -7,7 +7,7 @@
 import { createReadStream } from "node:fs";
 import http, { type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, join } from "node:path";
-import type { WOPRPluginContext, WOPRPlugin as WOPRPluginInterface } from "@wopr-network/plugin-types";
+import type { ConfigSchema, WOPRPluginContext, WOPRPlugin as WOPRPluginInterface } from "@wopr-network/plugin-types";
 import {
 	getStats,
 	incrementErrors,
@@ -172,8 +172,14 @@ async function fanOutToSessions(route: Route, input: IncomingInput): Promise<voi
 	const targets = route.targetSessions || [];
 	for (const target of targets) {
 		if (!target || target === input.session) continue;
+		if (!ctx) {
+			console.warn(
+				`[wopr-plugin-router] ctx is null while routing from ${input.session} to ${target} — plugin may be shutting down`,
+			);
+			continue;
+		}
 		try {
-			await ctx?.inject(target, input.message);
+			await ctx.inject(target, input.message);
 			incrementRouted();
 			recordRouteHit(input.session, target);
 		} catch (err) {
@@ -198,6 +204,32 @@ async function fanOutToChannels(route: OutgoingRoute, output: OutgoingOutput): P
 	}
 }
 
+const routerConfigSchema: ConfigSchema = {
+	title: "Router Plugin Configuration",
+	description: "Configure message routing between sessions and channels",
+	fields: [
+		{
+			name: "uiPort",
+			type: "number" as const,
+			label: "UI Port",
+			description: "Port for the routing UI server",
+			default: 7333,
+		},
+		{
+			name: "routes",
+			type: "array" as const,
+			label: "Incoming Routes",
+			description: "Incoming message routing rules",
+		},
+		{
+			name: "outgoingRoutes",
+			type: "array" as const,
+			label: "Outgoing Routes",
+			description: "Outgoing response routing rules",
+		},
+	],
+};
+
 export const WOPRPlugin: WOPRPluginInterface = {
 	name: "router",
 	version: "0.3.0",
@@ -215,42 +247,14 @@ export const WOPRPlugin: WOPRPluginInterface = {
 		lifecycle: {
 			shutdownBehavior: "graceful" as const,
 		},
-		configSchema: {
-			title: "Router Plugin Configuration",
-			description: "Configure message routing between sessions and channels",
-			fields: [
-				{
-					name: "uiPort",
-					type: "number" as const,
-					label: "UI Port",
-					description: "Port for the routing UI server",
-					default: 7333,
-				},
-				{
-					name: "routes",
-					type: "array" as const,
-					label: "Incoming Routes",
-					description: "Incoming message routing rules",
-				},
-				{
-					name: "outgoingRoutes",
-					type: "array" as const,
-					label: "Outgoing Routes",
-					description: "Outgoing response routing rules",
-				},
-			],
-		},
+		configSchema: routerConfigSchema,
 	},
 
 	async init(pluginContext: WOPRPluginContext): Promise<void> {
 		ctx = pluginContext as RouterPluginContext;
 
-		// Register config schema at runtime so the platform can validate/display it
-		const configSchema = WOPRPlugin.manifest?.configSchema;
-		if (configSchema) {
-			ctx.registerConfigSchema("router", configSchema);
-			cleanups.push(() => ctx?.unregisterConfigSchema?.("router"));
-		}
+		ctx.registerConfigSchema("wopr-plugin-router", routerConfigSchema);
+		cleanups.push(() => ctx?.unregisterConfigSchema?.("wopr-plugin-router"));
 
 		const config = ctx.getConfig<RouterConfig>();
 		const uiPort = config.uiPort || 7333;
