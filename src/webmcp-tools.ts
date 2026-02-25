@@ -23,10 +23,7 @@ interface RouterConfig {
 /**
  * getRouterStatus -- Router enabled/disabled, total routes configured.
  */
-export function buildRouterStatusResponse(
-	config: RouterConfig,
-	serverRunning: boolean,
-): Record<string, unknown> {
+export function buildRouterStatusResponse(config: RouterConfig, serverRunning: boolean): Record<string, unknown> {
 	const incomingRoutes = config.routes || [];
 	const outgoingRoutes = config.outgoingRoutes || [];
 
@@ -45,9 +42,7 @@ export function buildRouterStatusResponse(
 /**
  * listRoutes -- Routing rules as human-readable source->target mappings.
  */
-export function buildListRoutesResponse(
-	config: RouterConfig,
-): Record<string, unknown> {
+export function buildListRoutesResponse(config: RouterConfig): Record<string, unknown> {
 	const incomingRoutes = config.routes || [];
 	const outgoingRoutes = config.outgoingRoutes || [];
 
@@ -72,9 +67,7 @@ export function buildListRoutesResponse(
 /**
  * getRoutingStats -- Messages routed, route hit counts, errors.
  */
-export function buildRoutingStatsResponse(
-	stats: RoutingStats,
-): Record<string, unknown> {
+export function buildRoutingStatsResponse(stats: RoutingStats): Record<string, unknown> {
 	const uptimeMs = Date.now() - stats.startedAt;
 
 	return {

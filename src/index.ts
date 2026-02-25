@@ -5,16 +5,9 @@
  */
 
 import { createReadStream } from "node:fs";
-import http, {
-	type IncomingMessage,
-	type Server,
-	type ServerResponse,
-} from "node:http";
+import http, { type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, join } from "node:path";
-import type {
-	WOPRPluginContext,
-	WOPRPlugin as WOPRPluginInterface,
-} from "@wopr-network/plugin-types";
+import type { WOPRPluginContext, WOPRPlugin as WOPRPluginInterface } from "@wopr-network/plugin-types";
 import {
 	getStats,
 	incrementErrors,
@@ -23,11 +16,7 @@ import {
 	recordRouteHit,
 	resetStats,
 } from "./stats.js";
-import {
-	buildListRoutesResponse,
-	buildRouterStatusResponse,
-	buildRoutingStatsResponse,
-} from "./webmcp-tools.js";
+import { buildListRoutesResponse, buildRouterStatusResponse, buildRoutingStatsResponse } from "./webmcp-tools.js";
 
 // Plugin-specific types (not in @wopr-network/plugin-types)
 interface Route {
@@ -81,98 +70,89 @@ let uiServer: Server | null = null;
 const cleanups: Array<() => void> = [];
 
 function startUIServer(port: number = 7333): Server {
-	const server = http.createServer(
-		(req: IncomingMessage, res: ServerResponse) => {
-			const rawUrl = req.url || "/";
+	const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
+		const rawUrl = req.url || "/";
 
-			// WebMCP API routes — return JSON, before static file serving
-			if (rawUrl === "/api/webmcp/status") {
-				res.setHeader("Content-Type", "application/json");
-				res.setHeader("Access-Control-Allow-Origin", "*");
-				try {
-					const config = ctx?.getConfig<RouterConfig>() || {
-						routes: [],
-						outgoingRoutes: [],
-					};
-					res.end(
-						JSON.stringify(
-							buildRouterStatusResponse(config, uiServer !== null),
-						),
-					);
-				} catch (_error: unknown) {
-					res.statusCode = 500;
-					res.end(JSON.stringify({ error: "Internal server error" }));
-				}
-				return;
-			}
-			if (rawUrl === "/api/webmcp/routes") {
-				res.setHeader("Content-Type", "application/json");
-				res.setHeader("Access-Control-Allow-Origin", "*");
-				try {
-					const config = ctx?.getConfig<RouterConfig>() || {
-						routes: [],
-						outgoingRoutes: [],
-					};
-					res.end(JSON.stringify(buildListRoutesResponse(config)));
-				} catch (_error: unknown) {
-					res.statusCode = 500;
-					res.end(JSON.stringify({ error: "Internal server error" }));
-				}
-				return;
-			}
-			if (rawUrl === "/api/webmcp/stats") {
-				res.setHeader("Content-Type", "application/json");
-				res.setHeader("Access-Control-Allow-Origin", "*");
-				try {
-					res.end(JSON.stringify(buildRoutingStatsResponse(getStats())));
-				} catch (_error: unknown) {
-					res.statusCode = 500;
-					res.end(JSON.stringify({ error: "Internal server error" }));
-				}
-				return;
-			}
-
-			// Existing static file serving logic
-			if (!ctx) {
-				res.statusCode = 503;
-				res.end("Service unavailable");
-				return;
-			}
-			const relUrl = rawUrl === "/" ? "/ui.js" : rawUrl;
-			// Prevent path traversal: decode percent-encoding before sanitizing so
-			// encoded variants like %2e%2e bypass the literal ".." check are caught.
-			let decodedUrl: string;
-			try {
-				decodedUrl = decodeURIComponent(relUrl);
-			} catch {
-				res.statusCode = 400;
-				res.end("Bad request");
-				return;
-			}
-			const safeSegment = decodedUrl.replace(/^\/+/, "").replace(/\.\./g, "");
-			const pluginDir = ctx.getPluginDir();
-			const filePath = join(pluginDir, "dist", safeSegment);
-			const ext = extname(filePath).toLowerCase();
-
-			res.setHeader(
-				"Content-Type",
-				CONTENT_TYPES[ext] || "application/octet-stream",
-			);
+		// WebMCP API routes — return JSON, before static file serving
+		if (rawUrl === "/api/webmcp/status") {
+			res.setHeader("Content-Type", "application/json");
 			res.setHeader("Access-Control-Allow-Origin", "*");
-
 			try {
-				const stream = createReadStream(filePath);
-				stream.pipe(res);
-				stream.on("error", () => {
-					res.statusCode = 404;
-					res.end("Not found");
-				});
+				const config = ctx?.getConfig<RouterConfig>() || {
+					routes: [],
+					outgoingRoutes: [],
+				};
+				res.end(JSON.stringify(buildRouterStatusResponse(config, uiServer !== null)));
 			} catch (_error: unknown) {
 				res.statusCode = 500;
-				res.end("Error");
+				res.end(JSON.stringify({ error: "Internal server error" }));
 			}
-		},
-	);
+			return;
+		}
+		if (rawUrl === "/api/webmcp/routes") {
+			res.setHeader("Content-Type", "application/json");
+			res.setHeader("Access-Control-Allow-Origin", "*");
+			try {
+				const config = ctx?.getConfig<RouterConfig>() || {
+					routes: [],
+					outgoingRoutes: [],
+				};
+				res.end(JSON.stringify(buildListRoutesResponse(config)));
+			} catch (_error: unknown) {
+				res.statusCode = 500;
+				res.end(JSON.stringify({ error: "Internal server error" }));
+			}
+			return;
+		}
+		if (rawUrl === "/api/webmcp/stats") {
+			res.setHeader("Content-Type", "application/json");
+			res.setHeader("Access-Control-Allow-Origin", "*");
+			try {
+				res.end(JSON.stringify(buildRoutingStatsResponse(getStats())));
+			} catch (_error: unknown) {
+				res.statusCode = 500;
+				res.end(JSON.stringify({ error: "Internal server error" }));
+			}
+			return;
+		}
+
+		// Existing static file serving logic
+		if (!ctx) {
+			res.statusCode = 503;
+			res.end("Service unavailable");
+			return;
+		}
+		const relUrl = rawUrl === "/" ? "/ui.js" : rawUrl;
+		// Prevent path traversal: decode percent-encoding before sanitizing so
+		// encoded variants like %2e%2e bypass the literal ".." check are caught.
+		let decodedUrl: string;
+		try {
+			decodedUrl = decodeURIComponent(relUrl);
+		} catch {
+			res.statusCode = 400;
+			res.end("Bad request");
+			return;
+		}
+		const safeSegment = decodedUrl.replace(/^\/+/, "").replace(/\.\./g, "");
+		const pluginDir = ctx.getPluginDir();
+		const filePath = join(pluginDir, "dist", safeSegment);
+		const ext = extname(filePath).toLowerCase();
+
+		res.setHeader("Content-Type", CONTENT_TYPES[ext] || "application/octet-stream");
+		res.setHeader("Access-Control-Allow-Origin", "*");
+
+		try {
+			const stream = createReadStream(filePath);
+			stream.pipe(res);
+			stream.on("error", () => {
+				res.statusCode = 404;
+				res.end("Not found");
+			});
+		} catch (_error: unknown) {
+			res.statusCode = 500;
+			res.end("Error");
+		}
+	});
 
 	server.listen(port, "127.0.0.1", () => {
 		ctx?.log.info(`Router UI available at http://127.0.0.1:${port}`);
@@ -182,18 +162,13 @@ function startUIServer(port: number = 7333): Server {
 }
 
 export function matchesRoute(route: Route, input: IncomingInput): boolean {
-	if (route.sourceSession && route.sourceSession !== input.session)
-		return false;
-	if (route.channelType && route.channelType !== input.channel?.type)
-		return false;
+	if (route.sourceSession && route.sourceSession !== input.session) return false;
+	if (route.channelType && route.channelType !== input.channel?.type) return false;
 	if (route.channelId && route.channelId !== input.channel?.id) return false;
 	return true;
 }
 
-async function fanOutToSessions(
-	route: Route,
-	input: IncomingInput,
-): Promise<void> {
+async function fanOutToSessions(route: Route, input: IncomingInput): Promise<void> {
 	const targets = route.targetSessions || [];
 	for (const target of targets) {
 		if (!target || target === input.session) continue;
@@ -202,30 +177,22 @@ async function fanOutToSessions(
 			incrementRouted();
 			recordRouteHit(input.session, target);
 		} catch (err) {
-			ctx?.log.error(
-				`Failed to route message from ${input.session} to ${target}: ${err}`,
-			);
+			ctx?.log.error(`Failed to route message from ${input.session} to ${target}: ${err}`);
 			incrementErrors();
 		}
 	}
 }
 
-async function fanOutToChannels(
-	route: OutgoingRoute,
-	output: OutgoingOutput,
-): Promise<void> {
+async function fanOutToChannels(route: OutgoingRoute, output: OutgoingOutput): Promise<void> {
 	const channels = ctx?.getChannelsForSession(output.session) ?? [];
 	for (const adapter of channels) {
-		if (route.channelType && adapter.channel.type !== route.channelType)
-			continue;
+		if (route.channelType && adapter.channel.type !== route.channelType) continue;
 		if (route.channelId && adapter.channel.id !== route.channelId) continue;
 		try {
 			await adapter.send(output.response);
 			incrementOutgoingRouted();
 		} catch (err) {
-			ctx?.log.error(
-				`Failed to send message to channel ${adapter.channel.type}:${adapter.channel.id}: ${err}`,
-			);
+			ctx?.log.error(`Failed to send message to channel ${adapter.channel.type}:${adapter.channel.id}: ${err}`);
 			incrementErrors();
 		}
 	}
@@ -244,6 +211,10 @@ export const WOPRPlugin: WOPRPluginInterface = {
 		category: "middleware",
 		tags: ["routing", "middleware", "multi-bot", "channels"],
 		icon: "route",
+		requires: {},
+		lifecycle: {
+			shutdownBehavior: "graceful" as const,
+		},
 		configSchema: {
 			title: "Router Plugin Configuration",
 			description: "Configure message routing between sessions and channels",
@@ -274,6 +245,13 @@ export const WOPRPlugin: WOPRPluginInterface = {
 	async init(pluginContext: WOPRPluginContext): Promise<void> {
 		ctx = pluginContext as RouterPluginContext;
 
+		// Register config schema at runtime so the platform can validate/display it
+		const configSchema = WOPRPlugin.manifest?.configSchema;
+		if (configSchema) {
+			ctx.registerConfigSchema("router", configSchema);
+			cleanups.push(() => ctx?.unregisterConfigSchema?.("router"));
+		}
+
 		const config = ctx.getConfig<RouterConfig>();
 		const uiPort = config.uiPort || 7333;
 		uiServer = startUIServer(uiPort);
@@ -292,25 +270,32 @@ export const WOPRPlugin: WOPRPluginInterface = {
 			ctx.log.info("Registered Router UI component in WOPR settings");
 		}
 
-		// Register WebMCP A2A tool for routing stats
-		const ctxRecord = ctx as unknown as Record<string, unknown>;
-		if (typeof ctxRecord.registerA2ATool === "function") {
-			(ctxRecord.registerA2ATool as (tool: Record<string, unknown>) => void)({
-				name: "router_stats",
-				description:
-					"Get message routing statistics: messages routed, route hit counts, errors.",
-				inputSchema: { type: "object" as const, properties: {} },
-				handler: async () => {
-					return {
-						content: [
-							{
-								type: "text" as const,
-								text: JSON.stringify(buildRoutingStatsResponse(getStats())),
-							},
-						],
-					};
-				},
+		// Register A2A server with routing stats tool
+		if (ctx.registerA2AServer) {
+			ctx.registerA2AServer({
+				name: "router",
+				version: "0.3.0",
+				tools: [
+					{
+						name: "router.stats",
+						description: "Get message routing statistics: messages routed, route hit counts, errors.",
+						inputSchema: { type: "object", properties: {} },
+						handler: async () => {
+							return {
+								content: [
+									{
+										type: "text" as const,
+										text: JSON.stringify(buildRoutingStatsResponse(getStats())),
+									},
+								],
+							};
+						},
+					},
+				],
 			});
+			if (ctx.unregisterExtension) {
+				cleanups.push(() => ctx?.unregisterExtension?.("a2a:router"));
+			}
 		}
 
 		ctx.registerMiddleware({
@@ -328,8 +313,7 @@ export const WOPRPlugin: WOPRPluginInterface = {
 				const config = ctx?.getConfig<RouterConfig>();
 				const routes = config?.outgoingRoutes || [];
 				for (const route of routes) {
-					if (route.sourceSession && route.sourceSession !== output.session)
-						continue;
+					if (route.sourceSession && route.sourceSession !== output.session) continue;
 					await fanOutToChannels(route, output);
 				}
 				return output.response;
@@ -343,9 +327,7 @@ export const WOPRPlugin: WOPRPluginInterface = {
 			try {
 				cleanup();
 			} catch (_error: unknown) {
-				ctx?.log.error(
-					`Cleanup error: ${_error instanceof Error ? _error.message : String(_error)}`,
-				);
+				ctx?.log.error(`Cleanup error: ${_error instanceof Error ? _error.message : String(_error)}`);
 			}
 		}
 		cleanups.length = 0;
