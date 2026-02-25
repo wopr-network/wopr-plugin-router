@@ -31,6 +31,8 @@ function createMockContext(configOverride: Record<string, unknown> = {}) {
       registeredMiddleware = mw;
     }),
     registerUiComponent: vi.fn(),
+    registerConfigSchema: vi.fn(),
+    unregisterConfigSchema: vi.fn(),
   };
 
   return {

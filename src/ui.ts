@@ -5,9 +5,7 @@
  */
 
 declare const Solid: {
-	createSignal: <T>(
-		initial: T,
-	) => [{ (): T; (fn: (value: T) => void): void }, (value: T) => void];
+	createSignal: <T>(initial: T) => [{ (): T; (fn: (value: T) => void): void }, (value: T) => void];
 	onMount: (fn: () => void | Promise<void>) => void;
 };
 
@@ -37,12 +35,9 @@ interface RouterPluginProps {
 	saveConfig(config: RouterConfig): Promise<void>;
 }
 
-const { createSignal, onMount } =
-	(window as unknown as { Solid: typeof Solid }).Solid || Solid;
+const { createSignal, onMount } = (window as unknown as { Solid: typeof Solid }).Solid || Solid;
 
-export default function RouterPluginUI(
-	props: RouterPluginProps,
-): HTMLDivElement {
+export default function RouterPluginUI(props: RouterPluginProps): HTMLDivElement {
 	const [routes, setRoutes] = createSignal<Route[]>([]);
 	const [outgoingRoutes, setOutgoingRoutes] = createSignal<Route[]>([]);
 	const [newSource, setNewSource] = createSignal("");
@@ -120,8 +115,7 @@ export default function RouterPluginUI(
 		} else {
 			routes().forEach((route, index) => {
 				const item = document.createElement("div");
-				item.className =
-					"p-3 bg-wopr-panel rounded border border-wopr-border flex items-center justify-between mb-2";
+				item.className = "p-3 bg-wopr-panel rounded border border-wopr-border flex items-center justify-between mb-2";
 
 				const detailDiv = document.createElement("div");
 
@@ -138,8 +132,7 @@ export default function RouterPluginUI(
 				}
 
 				const deleteBtn = document.createElement("button");
-				deleteBtn.className =
-					"delete-route px-3 py-1 bg-red-500/20 text-red-400 rounded text-sm hover:bg-red-500/30";
+				deleteBtn.className = "delete-route px-3 py-1 bg-red-500/20 text-red-400 rounded text-sm hover:bg-red-500/30";
 				deleteBtn.textContent = "Delete";
 				deleteBtn.addEventListener("click", () => handleDeleteRoute(index));
 
@@ -172,25 +165,13 @@ export default function RouterPluginUI(
   `;
 
 	// Bind inputs
-	const sourceInput = formSection.querySelector(
-		".source-input",
-	) as HTMLInputElement;
-	const targetsInput = formSection.querySelector(
-		".targets-input",
-	) as HTMLInputElement;
-	const channelInput = formSection.querySelector(
-		".channel-input",
-	) as HTMLInputElement;
+	const sourceInput = formSection.querySelector(".source-input") as HTMLInputElement;
+	const targetsInput = formSection.querySelector(".targets-input") as HTMLInputElement;
+	const channelInput = formSection.querySelector(".channel-input") as HTMLInputElement;
 
-	sourceInput.addEventListener("input", (e) =>
-		setNewSource((e.target as HTMLInputElement).value),
-	);
-	targetsInput.addEventListener("input", (e) =>
-		setNewTargets((e.target as HTMLInputElement).value),
-	);
-	channelInput.addEventListener("input", (e) =>
-		setNewChannelType((e.target as HTMLInputElement).value),
-	);
+	sourceInput.addEventListener("input", (e) => setNewSource((e.target as HTMLInputElement).value));
+	targetsInput.addEventListener("input", (e) => setNewTargets((e.target as HTMLInputElement).value));
+	channelInput.addEventListener("input", (e) => setNewChannelType((e.target as HTMLInputElement).value));
 
 	const addBtn = formSection.querySelector(".add-btn");
 	if (addBtn) {
@@ -201,8 +182,7 @@ export default function RouterPluginUI(
 
 	// Info section
 	const infoSection = document.createElement("div");
-	infoSection.className =
-		"mt-4 p-3 bg-wopr-panel/50 rounded border border-wopr-border text-sm text-wopr-muted";
+	infoSection.className = "mt-4 p-3 bg-wopr-panel/50 rounded border border-wopr-border text-sm text-wopr-muted";
 	infoSection.innerHTML = `
     <p class="mb-1"><strong>Incoming:</strong> Messages to source session are forwarded to targets.</p>
     <p><strong>Outgoing:</strong> Responses are sent back to originating channel.</p>
