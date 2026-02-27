@@ -5,10 +5,10 @@ Message routing middleware for WOPR — routes messages between bots, channels, 
 ## Commands
 
 ```bash
-npm run build     # tsc
-npm run check     # biome check + tsc --noEmit (run before committing)
-npm run format    # biome format --write src/
-npm test          # vitest run
+npm run build     # tsc + esbuild bundle for ui.ts
+npm run build:ui  # esbuild bundle for src/ui.ts only
+npm run dev       # tsc --watch
+npm run clean     # rm -rf dist
 ```
 
 ## Architecture
