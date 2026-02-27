@@ -2,7 +2,7 @@
   "description": "Message routing middleware for WOPR",
   "devDependencies": {
     "@biomejs/biome": "^2.4.3",
-    "@types/node": "^25.3.0",
+    "@types/node": "^25.3.2",
     "@wopr-network/plugin-types": "^0.2.1",
     "esbuild": "^0.27.3",
     "jsdom": "^28.1.0",
