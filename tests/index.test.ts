@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { matchesRoute } from "../src/index.js";
 
 // The plugin uses module-level state, so we need to re-import for isolation
 // We'll dynamically import it in each test suite
@@ -17,6 +18,8 @@ function createMockContext(configOverride: Record<string, unknown> = {}) {
     onOutgoing?(output: { session: string; response: string }): Promise<string>;
   } | null = null;
 
+  let registeredA2AServer: any = null;
+
   const ctx = {
     log: {
       info: vi.fn(),
@@ -33,16 +36,59 @@ function createMockContext(configOverride: Record<string, unknown> = {}) {
     registerUiComponent: vi.fn(),
     registerConfigSchema: vi.fn(),
     unregisterConfigSchema: vi.fn(),
+    registerA2AServer: vi.fn((config: any) => { registeredA2AServer = config; }),
+    unregisterExtension: vi.fn(),
   };
 
   return {
     ctx,
     getRegisteredMiddleware: () => registeredMiddleware,
+    getRegisteredA2AServer: () => registeredA2AServer,
     updateConfig: (updates: Record<string, unknown>) => {
       Object.assign(config, updates);
     },
   };
 }
+
+describe("matchesRoute (exported)", () => {
+  it("should return true when route has no filters", () => {
+    expect(matchesRoute({}, { session: "any", message: "m" })).toBe(true);
+  });
+
+  it("should return false when sourceSession does not match", () => {
+    expect(matchesRoute({ sourceSession: "a" }, { session: "b", message: "m" })).toBe(false);
+  });
+
+  it("should return true when sourceSession matches", () => {
+    expect(matchesRoute({ sourceSession: "a" }, { session: "a", message: "m" })).toBe(true);
+  });
+
+  it("should return false when channelType does not match", () => {
+    expect(
+      matchesRoute(
+        { channelType: "discord" },
+        { session: "a", channel: { type: "slack", id: "1" }, message: "m" },
+      ),
+    ).toBe(false);
+  });
+
+  it("should return false when channelType specified but no channel on input", () => {
+    expect(matchesRoute({ channelType: "discord" }, { session: "a", message: "m" })).toBe(false);
+  });
+
+  it("should return false when channelId does not match", () => {
+    expect(
+      matchesRoute(
+        { channelId: "ch1" },
+        { session: "a", channel: { type: "discord", id: "ch2" }, message: "m" },
+      ),
+    ).toBe(false);
+  });
+
+  it("should return false when channelId specified but no channel on input", () => {
+    expect(matchesRoute({ channelId: "ch1" }, { session: "a", message: "m" })).toBe(false);
+  });
+});
 
 describe("router plugin", () => {
   let plugin: typeof import("../src/index.ts").default;
@@ -579,6 +625,69 @@ describe("router plugin", () => {
       });
 
       expect(ctx.inject).toHaveBeenCalledWith("session-b", "hello");
+    });
+  });
+
+  describe("error paths in fan-out", () => {
+    it("should log error and increment errors when inject throws", async () => {
+      const { ctx, getRegisteredMiddleware } = createMockContext({
+        routes: [{ sourceSession: "session-a", targetSessions: ["session-b"] }],
+      });
+      ctx.inject.mockRejectedValueOnce(new Error("inject failed"));
+      await plugin.init(ctx);
+      const mw = getRegisteredMiddleware()!;
+
+      const result = await mw.onIncoming!({
+        session: "session-a",
+        message: "hello",
+      });
+
+      expect(result).toBe("hello");
+      expect(ctx.log.error).toHaveBeenCalledWith(expect.stringContaining("Failed to route"));
+    });
+
+    it("should log error and increment errors when channel send throws", async () => {
+      const failSend = vi.fn(async () => { throw new Error("send failed"); });
+      const { ctx, getRegisteredMiddleware } = createMockContext({
+        outgoingRoutes: [{ sourceSession: "session-a" }],
+      });
+      ctx.getChannelsForSession.mockReturnValue([
+        { channel: { type: "discord", id: "ch1" }, send: failSend },
+      ]);
+      await plugin.init(ctx);
+      const mw = getRegisteredMiddleware()!;
+
+      const result = await mw.onOutgoing!({
+        session: "session-a",
+        response: "reply",
+      });
+
+      expect(result).toBe("reply");
+      expect(ctx.log.error).toHaveBeenCalledWith(expect.stringContaining("Failed to send"));
+    });
+  });
+
+  describe("A2A router.stats tool", () => {
+    it("should register A2A server with router.stats tool", async () => {
+      const { ctx, getRegisteredA2AServer } = createMockContext();
+      await plugin.init(ctx);
+      const server = getRegisteredA2AServer();
+      expect(server).not.toBeNull();
+      expect(server.name).toBe("router");
+      expect(server.tools).toHaveLength(1);
+      expect(server.tools[0].name).toBe("router.stats");
+    });
+
+    it("should return stats JSON from router.stats handler", async () => {
+      const { ctx, getRegisteredA2AServer } = createMockContext();
+      await plugin.init(ctx);
+      const server = getRegisteredA2AServer();
+      const result = await server.tools[0].handler();
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].type).toBe("text");
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.messages).toBeDefined();
+      expect(parsed.messages.routed).toBe(0);
     });
   });
 });
