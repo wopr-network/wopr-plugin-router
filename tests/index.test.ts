@@ -18,7 +18,7 @@ function createMockContext(configOverride: Record<string, unknown> = {}) {
     onOutgoing?(output: { session: string; response: string }): Promise<string>;
   } | null = null;
 
-  let registeredA2AServer: any = null;
+  let registeredA2AServer: { name: string; tools: Array<{ name: string; handler: () => Promise<any> }> } | null = null;
 
   const ctx = {
     log: {
@@ -36,7 +36,7 @@ function createMockContext(configOverride: Record<string, unknown> = {}) {
     registerUiComponent: vi.fn(),
     registerConfigSchema: vi.fn(),
     unregisterConfigSchema: vi.fn(),
-    registerA2AServer: vi.fn((config: any) => { registeredA2AServer = config; }),
+    registerA2AServer: vi.fn((config: typeof registeredA2AServer) => { registeredA2AServer = config; }),
     unregisterExtension: vi.fn(),
   };
 
