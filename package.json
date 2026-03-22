@@ -33,6 +33,9 @@
     "minVersion": "1.0.0",
     "type": "plugin"
   },
+  "keywords": [
+    "wopr-plugin"
+  ],
   "publishConfig": {
     "access": "public"
   },
